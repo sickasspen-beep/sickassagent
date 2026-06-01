@@ -45,7 +45,46 @@ All configuration is via environment variables (see `.env.example`):
 | `SLEEPER_CACHE_TTL_MS` | `300000`  | How long to cache Sleeper lookups (ms).                        |
 | `PORT`              | `3000`       | Port to listen on.                                             |
 | `NODE_ENV`          | `development`| Set to `production` (behind HTTPS) to enable secure cookies.   |
-| `DATA_DIR`          | `./data`     | Where the SQLite database file is stored.                      |
+| `DATA_DIR`          | `./data`     | Where the SQLite database (polls **and** sessions) is stored.  |
+
+## Deploy / launch
+
+The app is a single Node process that serves both the API and the frontend, with
+all state in one SQLite file. To go live:
+
+1. **Set the required environment variables:**
+   ```bash
+   SLEEPER_LEAGUE_ID=<your league id>
+   SESSION_SECRET=<long random string>   # node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   NODE_ENV=production
+   ```
+2. **Give it persistent storage.** Polls *and* login sessions live in
+   `DATA_DIR` (`./data` by default). Point it at a persistent disk/volume so a
+   restart or redeploy doesn't wipe polls or log everyone out.
+3. **Allow outbound access to `api.sleeper.app`** — required for login.
+4. **Run it behind HTTPS.** In `production` the app sets `trust proxy` and
+   issues `Secure` cookies, so it expects a TLS-terminating proxy (the norm on
+   Render/Fly/Railway/Heroku/nginx). A health check is exposed at `/healthz`.
+
+### Docker
+
+```bash
+docker build -t votebox .
+docker run -p 3000:3000 \
+  -e SLEEPER_LEAGUE_ID=<your league id> \
+  -e SESSION_SECRET=<long random string> \
+  -v votebox-data:/data \
+  votebox
+```
+
+The image sets `NODE_ENV=production`, stores data in the `/data` volume, and has
+a built-in `HEALTHCHECK`. Put it behind your platform's HTTPS router.
+
+### PaaS (Render / Railway / Fly / Heroku, etc.)
+
+A `Procfile` (`web: node server.js`) is included. Set the env vars above in the
+platform dashboard, attach a persistent disk mounted where `DATA_DIR` points,
+and deploy. These platforms terminate HTTPS for you, which satisfies step 4.
 
 ## How it works
 
@@ -71,6 +110,8 @@ public/
   index.html     Login gate + app shell
   styles.css     Styling
   app.js         Frontend logic (login, create, vote, results)
+Dockerfile       Container image (production)
+Procfile         Process definition for PaaS hosts
 .env.example     Configuration template
 ```
 
@@ -87,6 +128,7 @@ All `/api/polls*` routes require a logged-in session.
 | GET    | `/api/polls/:id`       | —                                       | One poll with results.   |
 | POST   | `/api/polls`           | `{ question, options[], durationDays }` | Create a poll.           |
 | POST   | `/api/polls/:id/vote`  | `{ optionId }`                          | Cast a vote as the logged-in team. |
+| GET    | `/healthz`             | —                                       | Health check (no auth); `{ ok: true }`. |
 
 ## Notes & limits
 

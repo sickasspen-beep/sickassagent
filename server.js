@@ -6,6 +6,7 @@ const path = require("path");
 const crypto = require("crypto");
 const express = require("express");
 const session = require("express-session");
+const SqliteStore = require("better-sqlite3-session-store")(session);
 const cookieParser = require("cookie-parser");
 
 const db = require("./db");
@@ -13,6 +14,11 @@ const sleeper = require("./sleeper");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const IS_PROD = process.env.NODE_ENV === "production";
+
+// Behind a reverse proxy / load balancer (Render, Fly, Heroku, nginx…), trust
+// the X-Forwarded-* headers so secure cookies are set over the proxied HTTPS.
+if (IS_PROD) app.set("trust proxy", 1);
 
 if (!sleeper.isConfigured()) {
   console.warn(
@@ -24,6 +30,13 @@ if (!sleeper.isConfigured()) {
 
 const SESSION_SECRET =
   process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
+if (!process.env.SESSION_SECRET && IS_PROD) {
+  console.warn(
+    "[warning] SESSION_SECRET is not set. A random one is being generated, which " +
+      "logs everyone out on restart and breaks multi-instance deployments. Set a " +
+      "fixed SESSION_SECRET in production."
+  );
+}
 
 const ALLOWED_DURATIONS = new Set([3, 7, 10]);
 const MAX_OPTIONS = 10;
@@ -33,13 +46,18 @@ app.use(express.json({ limit: "64kb" }));
 app.use(cookieParser());
 app.use(
   session({
+    store: new SqliteStore({
+      client: db,
+      // Periodically purge expired sessions from the database.
+      expired: { clear: true, intervalMs: 24 * 60 * 60 * 1000 },
+    }),
     secret: SESSION_SECRET,
     resave: false,
-    saveUninitialized: true,
+    saveUninitialized: false,
     cookie: {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: IS_PROD,
       maxAge: 30 * DAY_MS,
     },
   })
@@ -253,10 +271,27 @@ app.post("/api/polls/:id/vote", requireAuth, (req, res) => {
   res.json(result);
 });
 
+// Health check for load balancers / uptime monitors.
+app.get("/healthz", (req, res) => res.json({ ok: true }));
+
 // ---- Static frontend -----------------------------------------------------
 
 app.use(express.static(path.join(__dirname, "public")));
 
-app.listen(PORT, () => {
-  console.log(`Voting site running at http://localhost:${PORT}`);
+const server = app.listen(PORT, () => {
+  console.log(`Voting site running on port ${PORT}`);
 });
+
+// Graceful shutdown so the database closes cleanly.
+for (const sig of ["SIGTERM", "SIGINT"]) {
+  process.on(sig, () => {
+    server.close(() => {
+      try {
+        db.close();
+      } catch (_) {
+        /* already closed */
+      }
+      process.exit(0);
+    });
+  });
+}
