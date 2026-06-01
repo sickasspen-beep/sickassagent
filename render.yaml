@@ -1,10 +1,12 @@
-# Render Blueprint — one-click deploy for VoteBox.
+# Render Blueprint — free one-click deploy for VoteBox.
+# Data lives in a free Turso database (set the two env vars below in the
+# Render dashboard), so no persistent disk / paid plan is required.
 # Docs: https://render.com/docs/blueprint-spec
 services:
   - type: web
     name: votebox
     runtime: node
-    plan: starter # persistent disks require a paid instance (free tier can't keep data)
+    plan: free
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /healthz
@@ -12,15 +14,14 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: DATA_DIR
-        value: /data
       - key: SESSION_SECRET
         generateValue: true # Render generates a secure random value automatically
+      # Paste these two from your free Turso database (app.turso.tech):
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
       # SLEEPER_LEAGUE_ID is baked into the app (1365139935241191424);
       # uncomment to override:
       # - key: SLEEPER_LEAGUE_ID
       #   value: "1365139935241191424"
-    disk:
-      name: votebox-data # holds the SQLite DB: polls, votes, and sessions
-      mountPath: /data
-      sizeGB: 1

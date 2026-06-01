@@ -11,9 +11,9 @@ RUN npm ci --omit=dev
 # App source.
 COPY . .
 
-# SQLite database + sessions live here; mount a persistent volume to keep data.
+# Data lives in a Turso database (set TURSO_DATABASE_URL + TURSO_AUTH_TOKEN).
+# If those are unset it falls back to a local SQLite file in DATA_DIR (dev only).
 ENV DATA_DIR=/data
-VOLUME ["/data"]
 
 EXPOSE 3000
 

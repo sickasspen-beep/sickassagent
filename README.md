@@ -2,12 +2,12 @@
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/sickasspen-beep/sickassagent)
 
-> **One-tap deploy:** tap the button above, sign into Render with GitHub, and
-> confirm. The included `render.yaml` provisions the server, a 1 GB persistent
-> disk, HTTPS, and a health check, and auto-generates `SESSION_SECRET` — so
-> there's nothing to paste. (Render's persistent disk needs the paid Starter
-> instance, so you'll add a payment method.) When it's live, open the URL and
-> log in with your Sleeper username.
+> **Free one-tap deploy:** create a free database at
+> [app.turso.tech](https://app.turso.tech) and copy its URL + token. Then tap the
+> button above, sign into Render with GitHub, paste the two Turso values when
+> asked, and confirm. The included `render.yaml` runs on Render's **free** plan,
+> sets up HTTPS + a health check, and auto-generates `SESSION_SECRET`. When it's
+> live, open the URL and log in with your Sleeper username. (Full steps below.)
 
 A simple voting site for a **Sleeper fantasy league**. No accounts and no shared
 password — people **log in with their Sleeper username**, which is verified
@@ -48,64 +48,72 @@ All configuration is via environment variables (see `.env.example`):
 
 | Variable         | Default        | Purpose                                                        |
 | ---------------- | -------------- | -------------------------------------------------------------- |
+| `TURSO_DATABASE_URL` | _none_      | Free [Turso](https://turso.tech) database URL for storing polls/votes. Recommended for any real deploy. |
+| `TURSO_AUTH_TOKEN`  | _none_       | Auth token for the Turso database above.                       |
 | `SLEEPER_LEAGUE_ID` | `1365139935241191424` | Sleeper league that logins are verified against. Defaults to the configured league; override only to point at a different one. |
-| `SESSION_SECRET`    | random       | Signs session cookies. Set a fixed value so restarts don't log everyone out. |
+| `SESSION_SECRET`    | random       | Signs the session cookie. Set a fixed value so restarts don't log everyone out. |
 | `SLEEPER_CACHE_TTL_MS` | `300000`  | How long to cache Sleeper lookups (ms).                        |
 | `PORT`              | `3000`       | Port to listen on.                                             |
 | `NODE_ENV`          | `development`| Set to `production` (behind HTTPS) to enable secure cookies.   |
-| `DATA_DIR`          | `./data`     | Where the SQLite database (polls **and** sessions) is stored.  |
+| `DATA_DIR`          | `./data`     | Local SQLite file location, used only when Turso vars are unset (dev). |
 
-## Deploy / launch
+## Deploy / launch (free)
 
-The app is a single Node process that serves both the API and the frontend, with
-all state in one SQLite file. To go live:
+The app stores its data in a **free [Turso](https://turso.tech) database** (a
+hosted, SQLite-compatible DB), so it runs on free hosting tiers without a paid
+persistent disk. Login sessions are stateless signed cookies, so nothing else
+needs storage.
 
-1. **Set the required environment variables:**
-   ```bash
-   SESSION_SECRET=<long random string>   # node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-   NODE_ENV=production
-   # SLEEPER_LEAGUE_ID is already baked in (1365139935241191424); only set it to use a different league.
-   ```
-2. **Give it persistent storage.** Polls *and* login sessions live in
-   `DATA_DIR` (`./data` by default). Point it at a persistent disk/volume so a
-   restart or redeploy doesn't wipe polls or log everyone out.
-3. **Allow outbound access to `api.sleeper.app`** — required for login.
-4. **Run it behind HTTPS.** In `production` the app sets `trust proxy` and
-   issues `Secure` cookies, so it expects a TLS-terminating proxy (the norm on
-   Render/Fly/Railway/Heroku/nginx). A health check is exposed at `/healthz`.
+**Step 1 — create the free database (≈2 min, works on a phone):**
 
-### Docker
+1. Go to [app.turso.tech](https://app.turso.tech) and sign up (free).
+2. Create a database.
+3. Copy its **Database URL** (looks like `libsql://...`) and create/copy an
+   **auth token**.
+
+**Step 2 — deploy on Render's free plan:**
+
+1. Tap the **Deploy to Render** button at the top of this README.
+2. Sign into Render with GitHub and let it read `render.yaml`.
+3. When prompted, paste the two values: `TURSO_DATABASE_URL` and
+   `TURSO_AUTH_TOKEN`. (`SESSION_SECRET` is auto-generated; the Sleeper league is
+   baked in.)
+4. Deploy. Render terminates HTTPS for you and pings `/healthz`. Open the URL and
+   log in with your Sleeper username.
+
+> Render's free web service sleeps after ~15 min of inactivity and takes a few
+> seconds to wake on the next visit — fine for a casual league, and free. Your
+> data is safe regardless, since it lives in Turso.
+
+### Run it anywhere else (Docker / other PaaS)
+
+A `Dockerfile` and `Procfile` are included. Set `NODE_ENV=production`,
+`SESSION_SECRET`, `TURSO_DATABASE_URL`, and `TURSO_AUTH_TOKEN`, ensure outbound
+access to `api.sleeper.app`, and run behind HTTPS:
 
 ```bash
 docker build -t votebox .
 docker run -p 3000:3000 \
-  -e SLEEPER_LEAGUE_ID=<your league id> \
+  -e NODE_ENV=production \
   -e SESSION_SECRET=<long random string> \
-  -v votebox-data:/data \
+  -e TURSO_DATABASE_URL=<libsql://...> \
+  -e TURSO_AUTH_TOKEN=<token> \
   votebox
 ```
 
-The image sets `NODE_ENV=production`, stores data in the `/data` volume, and has
-a built-in `HEALTHCHECK`. Put it behind your platform's HTTPS router.
-
-### PaaS (Render / Railway / Fly / Heroku, etc.)
-
-A `Procfile` (`web: node server.js`) is included. Set the env vars above in the
-platform dashboard, attach a persistent disk mounted where `DATA_DIR` points,
-and deploy. These platforms terminate HTTPS for you, which satisfies step 4.
-
 ## How it works
 
-- **Backend**: Node.js + [Express](https://expressjs.com/), with data stored in
-  a local [SQLite](https://www.sqlite.org/) file via `better-sqlite3`.
+- **Backend**: Node.js + [Express](https://expressjs.com/). Data is stored in a
+  [Turso](https://turso.tech) / [libSQL](https://github.com/tursodatabase/libsql)
+  database (SQLite-compatible) in production, or a local SQLite file in dev.
 - **Login & identity (Sleeper)**: A person logs in with their Sleeper username.
   The server calls Sleeper's public API (`api.sleeper.app`) to look up the
   account, confirm it's a member of your `SLEEPER_LEAGUE_ID`, and read their
   league **team name**. That identity (Sleeper **user_id** + team name) is stored
-  in a signed session cookie and gates all poll APIs — there's no shared password.
-  Votes are keyed by `user_id`, so each account gets **one vote per poll**
-  regardless of browser or device. Lookups are cached briefly. The server needs
-  **outbound internet access to `api.sleeper.app`**.
+  in a **stateless signed cookie** and gates all poll APIs — there's no shared
+  password and no server-side session store. Votes are keyed by `user_id`, so each
+  account gets **one vote per poll** regardless of browser or device. Lookups are
+  cached briefly. The server needs **outbound internet access to `api.sleeper.app`**.
 - **Frontend**: Plain HTML/CSS/JS in `public/` — no build step.
 
 ## Project layout
@@ -113,7 +121,7 @@ and deploy. These platforms terminate HTTPS for you, which satisfies step 4.
 ```
 server.js        Express app: auth + poll/vote API + static hosting
 sleeper.js       Sleeper API client: resolve username -> league team name
-db.js            SQLite setup and schema (polls, options, votes)
+db.js            libSQL/Turso (or local SQLite) client + schema (polls, options, votes)
 public/
   index.html     Login gate + app shell
   styles.css     Styling
@@ -140,7 +148,9 @@ All `/api/polls*` routes require a logged-in session.
 
 ## Notes & limits
 
-- Data lives in `./data/voting.db`. Back up or persist that directory to keep polls.
+- In production, data lives in your Turso database; in dev it's a local
+  `./data/voting.db` file. Logins are stateless cookies, so they survive restarts
+  as long as `SESSION_SECRET` is fixed.
 - Login requires the server to reach `api.sleeper.app`. If it can't (no internet
   / blocked), logging in fails with a clear error.
 - Login is **trust-based**: Sleeper usernames are public, so a member could log
