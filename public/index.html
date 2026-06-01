@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VoteBox</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <!-- Login gate -->
+    <div id="login-view" class="view hidden">
+      <form id="login-form" class="card login-card">
+        <h1 class="logo">🗳️ VoteBox</h1>
+        <p class="muted">Enter the password to continue.</p>
+        <input
+          id="password-input"
+          type="password"
+          placeholder="Password"
+          autocomplete="current-password"
+          required
+        />
+        <button type="submit" class="btn primary">Enter</button>
+        <p id="login-error" class="error hidden"></p>
+      </form>
+    </div>
+
+    <!-- Main app -->
+    <div id="app-view" class="view hidden">
+      <header class="topbar">
+        <h1 class="logo" id="home-link">🗳️ VoteBox</h1>
+        <div class="topbar-actions">
+          <button id="new-poll-btn" class="btn primary">+ New Poll</button>
+          <button id="logout-btn" class="btn ghost">Log out</button>
+        </div>
+      </header>
+
+      <main class="container">
+        <!-- Create poll form -->
+        <section id="create-view" class="hidden">
+          <div class="card">
+            <h2>Create a poll</h2>
+            <form id="create-form">
+              <label class="field">
+                <span>Question</span>
+                <input
+                  id="question-input"
+                  type="text"
+                  maxlength="280"
+                  placeholder="What should we name the team mascot?"
+                  required
+                />
+              </label>
+
+              <div class="field">
+                <span>Options</span>
+                <div id="options-list"></div>
+                <button type="button" id="add-option-btn" class="btn small ghost">
+                  + Add option
+                </button>
+              </div>
+
+              <div class="field">
+                <span>Voting period</span>
+                <div class="duration-group">
+                  <label class="radio">
+                    <input type="radio" name="duration" value="3" checked />
+                    <span>3 days</span>
+                  </label>
+                  <label class="radio">
+                    <input type="radio" name="duration" value="7" />
+                    <span>7 days</span>
+                  </label>
+                  <label class="radio">
+                    <input type="radio" name="duration" value="10" />
+                    <span>10 days</span>
+                  </label>
+                </div>
+              </div>
+
+              <p id="create-error" class="error hidden"></p>
+
+              <div class="form-actions">
+                <button type="button" id="cancel-create-btn" class="btn ghost">
+                  Cancel
+                </button>
+                <button type="submit" class="btn primary">Create poll</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <!-- Poll list -->
+        <section id="list-view">
+          <h2 class="section-title">Polls</h2>
+          <div id="polls-container" class="polls"></div>
+          <p id="empty-state" class="muted hidden">
+            No polls yet. Create the first one!
+          </p>
+        </section>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
