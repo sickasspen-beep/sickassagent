@@ -141,6 +141,42 @@ body {
   padding: 1.5rem;
 }
 
+/* ---- Sleeper identity bar ---- */
+.identity-bar {
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.identity-inner {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  padding-top: 0.9rem;
+  padding-bottom: 0.9rem;
+  flex-wrap: wrap;
+}
+.identity-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1;
+  min-width: 200px;
+}
+.identity-field > span {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.identity-status {
+  font-size: 0.88rem;
+  align-self: center;
+}
+.identity-status.ok {
+  color: var(--accent);
+}
+.identity-status.err {
+  color: var(--error);
+}
+
 .section-title {
   margin: 0.5rem 0 1rem;
 }
@@ -322,6 +358,23 @@ input:focus {
   content: " ✓";
   color: var(--accent);
   font-weight: 700;
+}
+
+.opt-teams {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+.team-chip {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--muted);
 }
 
 .poll-foot {

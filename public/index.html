@@ -34,6 +34,25 @@
         </div>
       </header>
 
+      <!-- Sleeper identity bar: you vote as your league team -->
+      <div class="identity-bar">
+        <div class="container identity-inner">
+          <label class="identity-field">
+            <span>Your Sleeper username</span>
+            <input
+              id="sleeper-input"
+              type="text"
+              placeholder="e.g. coachmike"
+              autocomplete="off"
+              autocapitalize="off"
+              spellcheck="false"
+            />
+          </label>
+          <button id="sleeper-save-btn" class="btn small primary">Verify</button>
+          <span id="sleeper-status" class="identity-status muted"></span>
+        </div>
+      </div>
+
       <main class="container">
         <!-- Create poll form -->
         <section id="create-view" class="hidden">

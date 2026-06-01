@@ -58,6 +58,65 @@ function timeLeft(expiresAt) {
   return `${hours}h ${mins}m left`;
 }
 
+// ---- Sleeper identity ----------------------------------------------------
+// The voter's Sleeper username is remembered in this browser; votes are tracked
+// server-side by the team name resolved from their league.
+const SLEEPER_KEY = "sleeperUsername";
+let verifiedTeam = null; // resolved team name once verified, else null
+
+function getSleeperUsername() {
+  return (localStorage.getItem(SLEEPER_KEY) || "").trim();
+}
+
+function setSleeperStatus(text, kind) {
+  const el = $("#sleeper-status");
+  el.textContent = text;
+  el.className = "identity-status " + (kind || "muted");
+}
+
+async function verifySleeper(username, { quiet = false } = {}) {
+  verifiedTeam = null;
+  const name = (username || "").trim();
+  if (!name) {
+    setSleeperStatus("Enter your Sleeper username to vote.", "muted");
+    return false;
+  }
+  if (!quiet) setSleeperStatus("Checking…", "muted");
+  try {
+    const data = await api(`/api/sleeper/me?username=${encodeURIComponent(name)}`);
+    verifiedTeam = data.teamName;
+    localStorage.setItem(SLEEPER_KEY, name);
+    setSleeperStatus(`✓ Voting as ${data.teamName}`, "ok");
+    return true;
+  } catch (err) {
+    if (err.status === 401) {
+      showLogin();
+      return false;
+    }
+    setSleeperStatus(err.message, "err");
+    return false;
+  }
+}
+
+function initIdentity() {
+  const saved = getSleeperUsername();
+  $("#sleeper-input").value = saved;
+  if (saved) verifySleeper(saved, { quiet: true });
+  else setSleeperStatus("Enter your Sleeper username to vote.", "muted");
+}
+
+$("#sleeper-save-btn").addEventListener("click", async () => {
+  const ok = await verifySleeper($("#sleeper-input").value);
+  if (ok) loadPolls(); // refresh so the viewer's own votes are flagged
+});
+
+$("#sleeper-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    $("#sleeper-save-btn").click();
+  }
+});
+
 // ---- Views ---------------------------------------------------------------
 function showLogin() {
   $("#login-view").classList.remove("hidden");
@@ -69,6 +128,7 @@ function showApp() {
   $("#login-view").classList.add("hidden");
   $("#app-view").classList.remove("hidden");
   showList();
+  initIdentity();
   loadPolls();
 }
 
@@ -187,7 +247,9 @@ $("#create-form").addEventListener("submit", async (e) => {
 // ---- Poll list & voting --------------------------------------------------
 async function loadPolls() {
   try {
-    const polls = await api("/api/polls");
+    const u = getSleeperUsername();
+    const qs = u ? `?sleeper=${encodeURIComponent(u)}` : "";
+    const polls = await api(`/api/polls${qs}`);
     renderPolls(polls);
   } catch (err) {
     if (err.status === 401) {
@@ -224,6 +286,12 @@ function renderPollCard(poll) {
       const meta = showResults
         ? `<span class="opt-meta">${opt.votes} · ${pct}%</span>`
         : "";
+      const teams =
+        showResults && opt.teams && opt.teams.length
+          ? `<div class="opt-teams">${opt.teams
+              .map((t) => `<span class="team-chip">${escapeHtml(t)}</span>`)
+              .join("")}</div>`
+          : "";
       return `
         <div class="opt ${votable ? "votable" : "disabled"} ${
         chosen ? "chosen" : ""
@@ -233,6 +301,7 @@ function renderPollCard(poll) {
             <span class="opt-label">${escapeHtml(opt.label)}</span>
             ${meta}
           </div>
+          ${teams}
         </div>`;
     })
     .join("");
@@ -263,16 +332,23 @@ function renderPollCard(poll) {
 }
 
 async function vote(pollId, optionId) {
+  const username = getSleeperUsername();
+  if (!username) {
+    toast("Enter your Sleeper username first", true);
+    $("#sleeper-input").focus();
+    return;
+  }
   try {
-    await api(`/api/polls/${pollId}/vote`, {
+    const result = await api(`/api/polls/${pollId}/vote`, {
       method: "POST",
-      body: JSON.stringify({ optionId: Number(optionId) }),
+      body: JSON.stringify({ optionId: Number(optionId), sleeperUsername: username }),
     });
-    toast("Vote recorded ✓");
+    toast(`Vote recorded as ${result.votedAs} ✓`);
     loadPolls();
   } catch (err) {
     toast(err.message, true);
-    if (err.status === 409) loadPolls(); // refresh to show their existing vote
+    // 409 = already voted; refresh so results/their existing vote show.
+    if (err.status === 409) loadPolls();
   }
 }
 

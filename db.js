@@ -27,11 +27,13 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS votes (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    poll_id    TEXT NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
-    option_id  INTEGER NOT NULL REFERENCES options(id) ON DELETE CASCADE,
-    voter_key  TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    poll_id      TEXT NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
+    option_id    INTEGER NOT NULL REFERENCES options(id) ON DELETE CASCADE,
+    voter_key    TEXT NOT NULL,          -- Sleeper user_id (one vote per account)
+    team_name    TEXT NOT NULL,          -- voter's league team name at time of vote
+    display_name TEXT,                   -- voter's Sleeper display name
+    created_at   INTEGER NOT NULL,
     UNIQUE (poll_id, voter_key)
   );
 

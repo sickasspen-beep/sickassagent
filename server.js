@@ -9,9 +9,18 @@ const session = require("express-session");
 const cookieParser = require("cookie-parser");
 
 const db = require("./db");
+const sleeper = require("./sleeper");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+if (!sleeper.isConfigured()) {
+  console.warn(
+    "[warning] SLEEPER_LEAGUE_ID is not set. Voting requires it so members can be " +
+      "verified against your Sleeper league. Set SLEEPER_LEAGUE_ID in your environment " +
+      "(find it in your league URL: sleeper.com/leagues/<LEAGUE_ID>/...)."
+  );
+}
 
 // The single shared password users enter to access the site.
 const SITE_PASSWORD = process.env.SITE_PASSWORD || "letmein";
@@ -79,7 +88,8 @@ app.get("/api/session", (req, res) => {
 
 // ---- Helpers -------------------------------------------------------------
 
-function serializePoll(poll, voterKey) {
+// `voterUserId` is the viewer's Sleeper user_id (or null), used to flag their own vote.
+function serializePoll(poll, voterUserId) {
   const options = db
     .prepare(
       `SELECT o.id, o.label,
@@ -88,11 +98,27 @@ function serializePoll(poll, voterKey) {
     )
     .all(poll.id);
 
+  // Team names per option, in voting order, so results show who voted for what.
+  const voterRows = db
+    .prepare(
+      "SELECT option_id, team_name FROM votes WHERE poll_id = ? ORDER BY created_at ASC"
+    )
+    .all(poll.id);
+  const teamsByOption = new Map();
+  for (const row of voterRows) {
+    if (!teamsByOption.has(row.option_id)) teamsByOption.set(row.option_id, []);
+    teamsByOption.get(row.option_id).push(row.team_name);
+  }
+
   const totalVotes = options.reduce((sum, o) => sum + o.votes, 0);
 
-  const myVote = db
-    .prepare("SELECT option_id FROM votes WHERE poll_id = ? AND voter_key = ?")
-    .get(poll.id, voterKey);
+  let votedOptionId = null;
+  if (voterUserId) {
+    const myVote = db
+      .prepare("SELECT option_id FROM votes WHERE poll_id = ? AND voter_key = ?")
+      .get(poll.id, voterUserId);
+    if (myVote) votedOptionId = myVote.option_id;
+  }
 
   return {
     id: poll.id,
@@ -101,32 +127,51 @@ function serializePoll(poll, voterKey) {
     expiresAt: poll.expires_at,
     closed: Date.now() >= poll.expires_at,
     totalVotes,
-    votedOptionId: myVote ? myVote.option_id : null,
+    votedOptionId,
     options: options.map((o) => ({
       id: o.id,
       label: o.label,
       votes: o.votes,
+      teams: teamsByOption.get(o.id) || [],
     })),
   };
 }
 
-// A per-session identifier used to enforce one vote per browser session.
-function voterKeyFor(req) {
-  return req.sessionID;
+// Best-effort: resolve an optional ?sleeper=username to a user_id so we can flag
+// the viewer's own votes. Returns null if absent or unresolvable (never throws).
+async function viewerUserId(req) {
+  const username = req.query.sleeper;
+  if (!username) return null;
+  try {
+    const voter = await sleeper.resolveVoter(username);
+    return voter.userId;
+  } catch (_) {
+    return null;
+  }
 }
 
 // ---- Poll API ------------------------------------------------------------
 
-app.get("/api/polls", requireAuth, (req, res) => {
-  const polls = db.prepare("SELECT * FROM polls ORDER BY created_at DESC").all();
-  const voterKey = voterKeyFor(req);
-  res.json(polls.map((p) => serializePoll(p, voterKey)));
+// Verify a Sleeper username belongs to the league and return its team name.
+app.get("/api/sleeper/me", requireAuth, async (req, res) => {
+  try {
+    const voter = await sleeper.resolveVoter(req.query.username);
+    res.json({ teamName: voter.teamName, displayName: voter.displayName });
+  } catch (e) {
+    res.status(sleeper.statusForCode(e.code)).json({ error: e.message });
+  }
 });
 
-app.get("/api/polls/:id", requireAuth, (req, res) => {
+app.get("/api/polls", requireAuth, async (req, res) => {
+  const polls = db.prepare("SELECT * FROM polls ORDER BY created_at DESC").all();
+  const userId = await viewerUserId(req);
+  res.json(polls.map((p) => serializePoll(p, userId)));
+});
+
+app.get("/api/polls/:id", requireAuth, async (req, res) => {
   const poll = db.prepare("SELECT * FROM polls WHERE id = ?").get(req.params.id);
   if (!poll) return res.status(404).json({ error: "Poll not found" });
-  res.json(serializePoll(poll, voterKeyFor(req)));
+  res.json(serializePoll(poll, await viewerUserId(req)));
 });
 
 app.post("/api/polls", requireAuth, (req, res) => {
@@ -179,10 +224,10 @@ app.post("/api/polls", requireAuth, (req, res) => {
   tx();
 
   const poll = db.prepare("SELECT * FROM polls WHERE id = ?").get(id);
-  res.status(201).json(serializePoll(poll, voterKeyFor(req)));
+  res.status(201).json(serializePoll(poll, null));
 });
 
-app.post("/api/polls/:id/vote", requireAuth, (req, res) => {
+app.post("/api/polls/:id/vote", requireAuth, async (req, res) => {
   const poll = db.prepare("SELECT * FROM polls WHERE id = ?").get(req.params.id);
   if (!poll) return res.status(404).json({ error: "Poll not found" });
 
@@ -198,24 +243,39 @@ app.post("/api/polls/:id/vote", requireAuth, (req, res) => {
     return res.status(400).json({ error: "Invalid option" });
   }
 
-  const voterKey = voterKeyFor(req);
+  // Verify the voter against the Sleeper league and resolve their team name.
+  let voter;
+  try {
+    voter = await sleeper.resolveVoter((req.body || {}).sleeperUsername);
+  } catch (e) {
+    return res.status(sleeper.statusForCode(e.code)).json({ error: e.message });
+  }
+
   const existing = db
-    .prepare("SELECT id FROM votes WHERE poll_id = ? AND voter_key = ?")
-    .get(poll.id, voterKey);
+    .prepare("SELECT option_id FROM votes WHERE poll_id = ? AND voter_key = ?")
+    .get(poll.id, voter.userId);
   if (existing) {
-    return res.status(409).json({ error: "You have already voted on this poll" });
+    return res.status(409).json({
+      error: `${voter.teamName} has already voted on this poll`,
+      votedOptionId: existing.option_id,
+    });
   }
 
   try {
     db.prepare(
-      "INSERT INTO votes (poll_id, option_id, voter_key, created_at) VALUES (?, ?, ?, ?)"
-    ).run(poll.id, optionId, voterKey, Date.now());
+      `INSERT INTO votes (poll_id, option_id, voter_key, team_name, display_name, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(poll.id, optionId, voter.userId, voter.teamName, voter.displayName, Date.now());
   } catch (err) {
     // UNIQUE constraint race — treat as already voted.
-    return res.status(409).json({ error: "You have already voted on this poll" });
+    return res
+      .status(409)
+      .json({ error: `${voter.teamName} has already voted on this poll` });
   }
 
-  res.json(serializePoll(poll, voterKey));
+  const result = serializePoll(poll, voter.userId);
+  result.votedAs = voter.teamName;
+  res.json(result);
 });
 
 // ---- Static frontend -----------------------------------------------------
