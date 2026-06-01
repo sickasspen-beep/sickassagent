@@ -1,5 +1,14 @@
 # 🗳️ VoteBox
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/sickasspen-beep/sickassagent)
+
+> **One-tap deploy:** tap the button above, sign into Render with GitHub, and
+> confirm. The included `render.yaml` provisions the server, a 1 GB persistent
+> disk, HTTPS, and a health check, and auto-generates `SESSION_SECRET` — so
+> there's nothing to paste. (Render's persistent disk needs the paid Starter
+> instance, so you'll add a payment method.) When it's live, open the URL and
+> log in with your Sleeper username.
+
 A simple voting site for a **Sleeper fantasy league**. No accounts and no shared
 password — people **log in with their Sleeper username**, which is verified
 against your league. That login is also their voting identity. Once in, anyone can:
