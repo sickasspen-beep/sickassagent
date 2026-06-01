@@ -24,9 +24,8 @@ Polls automatically close when their voting period ends.
 # 1. Install dependencies
 npm install
 
-# 2. Configure your Sleeper league
+# 2. (Optional) configure overrides — the Sleeper league is already baked in
 cp .env.example .env
-#    then edit .env and set SLEEPER_LEAGUE_ID
 
 # 3. Run it
 npm start
@@ -40,7 +39,7 @@ All configuration is via environment variables (see `.env.example`):
 
 | Variable         | Default        | Purpose                                                        |
 | ---------------- | -------------- | -------------------------------------------------------------- |
-| `SLEEPER_LEAGUE_ID` | _none_       | Your Sleeper league ID — logins are verified against it. **Set this!** Find it in your league URL: `sleeper.com/leagues/<LEAGUE_ID>/...` |
+| `SLEEPER_LEAGUE_ID` | `1365139935241191424` | Sleeper league that logins are verified against. Defaults to the configured league; override only to point at a different one. |
 | `SESSION_SECRET`    | random       | Signs session cookies. Set a fixed value so restarts don't log everyone out. |
 | `SLEEPER_CACHE_TTL_MS` | `300000`  | How long to cache Sleeper lookups (ms).                        |
 | `PORT`              | `3000`       | Port to listen on.                                             |
@@ -54,9 +53,9 @@ all state in one SQLite file. To go live:
 
 1. **Set the required environment variables:**
    ```bash
-   SLEEPER_LEAGUE_ID=<your league id>
    SESSION_SECRET=<long random string>   # node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
    NODE_ENV=production
+   # SLEEPER_LEAGUE_ID is already baked in (1365139935241191424); only set it to use a different league.
    ```
 2. **Give it persistent storage.** Polls *and* login sessions live in
    `DATA_DIR` (`./data` by default). Point it at a persistent disk/volume so a

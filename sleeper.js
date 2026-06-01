@@ -4,7 +4,9 @@
 // Docs: https://docs.sleeper.com/  (no auth required for these endpoints)
 
 const API = process.env.SLEEPER_API_BASE || "https://api.sleeper.app/v1";
-const LEAGUE_ID = (process.env.SLEEPER_LEAGUE_ID || "").trim();
+// Defaults to the configured league; override with SLEEPER_LEAGUE_ID if needed.
+const DEFAULT_LEAGUE_ID = "1365139935241191424";
+const LEAGUE_ID = (process.env.SLEEPER_LEAGUE_ID || DEFAULT_LEAGUE_ID).trim();
 const TTL_MS = Number(process.env.SLEEPER_CACHE_TTL_MS || 5 * 60 * 1000);
 
 // Simple in-memory caches so we don't hammer Sleeper on every request.
