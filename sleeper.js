@@ -71,8 +71,10 @@ async function getUserByUsername(username) {
 // Resolve a typed Sleeper username to a league member.
 // Returns { userId, teamName, displayName } or throws an Error with a `.code`.
 async function resolveVoter(rawUsername) {
+  if (!LEAGUE_ID) throw err("SLEEPER_LEAGUE_ID is not configured on the server.", "NO_LEAGUE");
+
   const username = String(rawUsername || "").trim();
-  if (!username) throw err("Enter your Sleeper username to vote.", "EMPTY");
+  if (!username) throw err("Enter your Sleeper username.", "EMPTY");
 
   const user = await getUserByUsername(username);
   if (!user || !user.user_id) {

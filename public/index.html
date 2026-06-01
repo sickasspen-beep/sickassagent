@@ -7,20 +7,25 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <!-- Login gate -->
+    <!-- Login gate: sign in with your Sleeper username -->
     <div id="login-view" class="view hidden">
       <form id="login-form" class="card login-card">
         <h1 class="logo">🗳️ VoteBox</h1>
-        <p class="muted">Enter the password to continue.</p>
+        <p class="muted">Log in with your Sleeper username.</p>
         <input
-          id="password-input"
-          type="password"
-          placeholder="Password"
-          autocomplete="current-password"
+          id="username-input"
+          type="text"
+          placeholder="Sleeper username"
+          autocomplete="username"
+          autocapitalize="off"
+          spellcheck="false"
           required
         />
-        <button type="submit" class="btn primary">Enter</button>
+        <button type="submit" class="btn primary">Log in</button>
         <p id="login-error" class="error hidden"></p>
+        <p class="muted login-hint">
+          You'll vote as your league team. One vote per team.
+        </p>
       </form>
     </div>
 
@@ -29,29 +34,11 @@
       <header class="topbar">
         <h1 class="logo" id="home-link">🗳️ VoteBox</h1>
         <div class="topbar-actions">
+          <span id="whoami" class="whoami"></span>
           <button id="new-poll-btn" class="btn primary">+ New Poll</button>
           <button id="logout-btn" class="btn ghost">Log out</button>
         </div>
       </header>
-
-      <!-- Sleeper identity bar: you vote as your league team -->
-      <div class="identity-bar">
-        <div class="container identity-inner">
-          <label class="identity-field">
-            <span>Your Sleeper username</span>
-            <input
-              id="sleeper-input"
-              type="text"
-              placeholder="e.g. coachmike"
-              autocomplete="off"
-              autocapitalize="off"
-              spellcheck="false"
-            />
-          </label>
-          <button id="sleeper-save-btn" class="btn small primary">Verify</button>
-          <span id="sleeper-status" class="identity-status muted"></span>
-        </div>
-      </div>
 
       <main class="container">
         <!-- Create poll form -->

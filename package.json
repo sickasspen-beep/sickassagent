@@ -1,7 +1,7 @@
 {
   "name": "voting-site",
   "version": "1.0.0",
-  "description": "A password-protected, no-account voting site where anyone can create polls.",
+  "description": "A Sleeper-league voting site: log in with your Sleeper username, create polls, and vote as your team.",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {

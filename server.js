@@ -22,15 +22,6 @@ if (!sleeper.isConfigured()) {
   );
 }
 
-// The single shared password users enter to access the site.
-const SITE_PASSWORD = process.env.SITE_PASSWORD || "letmein";
-if (!process.env.SITE_PASSWORD) {
-  console.warn(
-    "[warning] SITE_PASSWORD is not set. Using the insecure default 'letmein'. " +
-      "Set SITE_PASSWORD in your environment (or a .env file) before sharing this site."
-  );
-}
-
 const SESSION_SECRET =
   process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
 
@@ -55,27 +46,28 @@ app.use(
 );
 
 // ---- Auth ----------------------------------------------------------------
-
-// Constant-time password comparison to avoid timing leaks.
-function passwordMatches(candidate) {
-  const a = Buffer.from(String(candidate));
-  const b = Buffer.from(SITE_PASSWORD);
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
-}
+// There is no shared password. People log in with their Sleeper username, which
+// we verify against the configured league. The resulting league identity (team
+// name + Sleeper user_id) is stored in the session and used as the voter.
 
 function requireAuth(req, res, next) {
-  if (req.session && req.session.authed) return next();
-  return res.status(401).json({ error: "Not authenticated" });
+  if (req.session && req.session.voter) return next();
+  return res.status(401).json({ error: "Not logged in" });
 }
 
-app.post("/api/login", (req, res) => {
-  const { password } = req.body || {};
-  if (typeof password !== "string" || !passwordMatches(password)) {
-    return res.status(401).json({ error: "Incorrect password" });
+app.post("/api/login", async (req, res) => {
+  let voter;
+  try {
+    voter = await sleeper.resolveVoter((req.body || {}).username);
+  } catch (e) {
+    return res.status(sleeper.statusForCode(e.code)).json({ error: e.message });
   }
-  req.session.authed = true;
-  res.json({ ok: true });
+  req.session.voter = {
+    userId: voter.userId,
+    teamName: voter.teamName,
+    displayName: voter.displayName,
+  };
+  res.json({ teamName: voter.teamName, displayName: voter.displayName });
 });
 
 app.post("/api/logout", (req, res) => {
@@ -83,7 +75,13 @@ app.post("/api/logout", (req, res) => {
 });
 
 app.get("/api/session", (req, res) => {
-  res.json({ authed: Boolean(req.session && req.session.authed) });
+  const voter = req.session && req.session.voter;
+  if (!voter) return res.json({ authed: false });
+  res.json({
+    authed: true,
+    teamName: voter.teamName,
+    displayName: voter.displayName,
+  });
 });
 
 // ---- Helpers -------------------------------------------------------------
@@ -137,41 +135,23 @@ function serializePoll(poll, voterUserId) {
   };
 }
 
-// Best-effort: resolve an optional ?sleeper=username to a user_id so we can flag
-// the viewer's own votes. Returns null if absent or unresolvable (never throws).
-async function viewerUserId(req) {
-  const username = req.query.sleeper;
-  if (!username) return null;
-  try {
-    const voter = await sleeper.resolveVoter(username);
-    return voter.userId;
-  } catch (_) {
-    return null;
-  }
+// The logged-in voter for this request (set at login).
+function currentVoter(req) {
+  return req.session.voter;
 }
 
 // ---- Poll API ------------------------------------------------------------
 
-// Verify a Sleeper username belongs to the league and return its team name.
-app.get("/api/sleeper/me", requireAuth, async (req, res) => {
-  try {
-    const voter = await sleeper.resolveVoter(req.query.username);
-    res.json({ teamName: voter.teamName, displayName: voter.displayName });
-  } catch (e) {
-    res.status(sleeper.statusForCode(e.code)).json({ error: e.message });
-  }
-});
-
-app.get("/api/polls", requireAuth, async (req, res) => {
+app.get("/api/polls", requireAuth, (req, res) => {
   const polls = db.prepare("SELECT * FROM polls ORDER BY created_at DESC").all();
-  const userId = await viewerUserId(req);
+  const userId = currentVoter(req).userId;
   res.json(polls.map((p) => serializePoll(p, userId)));
 });
 
-app.get("/api/polls/:id", requireAuth, async (req, res) => {
+app.get("/api/polls/:id", requireAuth, (req, res) => {
   const poll = db.prepare("SELECT * FROM polls WHERE id = ?").get(req.params.id);
   if (!poll) return res.status(404).json({ error: "Poll not found" });
-  res.json(serializePoll(poll, await viewerUserId(req)));
+  res.json(serializePoll(poll, currentVoter(req).userId));
 });
 
 app.post("/api/polls", requireAuth, (req, res) => {
@@ -227,7 +207,7 @@ app.post("/api/polls", requireAuth, (req, res) => {
   res.status(201).json(serializePoll(poll, null));
 });
 
-app.post("/api/polls/:id/vote", requireAuth, async (req, res) => {
+app.post("/api/polls/:id/vote", requireAuth, (req, res) => {
   const poll = db.prepare("SELECT * FROM polls WHERE id = ?").get(req.params.id);
   if (!poll) return res.status(404).json({ error: "Poll not found" });
 
@@ -243,13 +223,8 @@ app.post("/api/polls/:id/vote", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "Invalid option" });
   }
 
-  // Verify the voter against the Sleeper league and resolve their team name.
-  let voter;
-  try {
-    voter = await sleeper.resolveVoter((req.body || {}).sleeperUsername);
-  } catch (e) {
-    return res.status(sleeper.statusForCode(e.code)).json({ error: e.message });
-  }
+  // The voter is the logged-in Sleeper identity from the session.
+  const voter = currentVoter(req);
 
   const existing = db
     .prepare("SELECT option_id FROM votes WHERE poll_id = ? AND voter_key = ?")

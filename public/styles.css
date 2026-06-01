@@ -141,40 +141,22 @@ body {
   padding: 1.5rem;
 }
 
-/* ---- Sleeper identity bar ---- */
-.identity-bar {
-  border-bottom: 1px solid var(--border);
-  background: var(--panel);
-}
-.identity-inner {
-  display: flex;
-  align-items: flex-end;
-  gap: 0.75rem;
-  padding-top: 0.9rem;
-  padding-bottom: 0.9rem;
-  flex-wrap: wrap;
-}
-.identity-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  flex: 1;
-  min-width: 200px;
-}
-.identity-field > span {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--muted);
-}
-.identity-status {
-  font-size: 0.88rem;
-  align-self: center;
-}
-.identity-status.ok {
+/* ---- Logged-in identity ---- */
+.whoami {
   color: var(--accent);
+  font-size: 0.88rem;
+  font-weight: 600;
+  align-self: center;
+  margin-right: 0.25rem;
 }
-.identity-status.err {
-  color: var(--error);
+.login-hint {
+  font-size: 0.82rem;
+  margin: 0.25rem 0 0;
+}
+@media (max-width: 520px) {
+  .whoami {
+    display: none;
+  }
 }
 
 .section-title {
